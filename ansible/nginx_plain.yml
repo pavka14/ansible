@@ -1,0 +1,30 @@
+---
+########################################
+#    Install plain nginx, no extras.   #
+########################################
+# Install default nginx from repository, to be used for building the GeoIP2 module, and to get SSL validated.
+# It will be replaced with another nginx later, recompiled with the GeoIP2 module.
+- name: Install plain nginx, no extras
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    # Make sure there is no conflicting apache2 service running. Just stop and disable, do not remove.
+    - name: Stop and disable apache2 service if it exists
+      systemd:
+        name: apache2
+        state: stopped
+        enabled: no
+      register: apache2_service
+      failed_when:
+        - apache2_service.failed
+        - "'Could not find the requested service' not in apache2_service.msg"
+      ignore_errors: no
+
+    # Install default nginx from repository. No need to start it yet.
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present

@@ -1,0 +1,43 @@
+---
+######################################
+#    Install some optional extras.   #
+######################################
+- name: Install extras
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Install Fail2ban
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: Copy basic Fail2ban local configuration
+      copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          ignoreip = 127.0.0.1/8 ::1
+          bantime = 600
+          findtime = 600
+          maxretry = 5
+    
+          [sshd]
+          enabled = true
+
+      notify: Restart fail2ban
+
+    - name: Ensure fail2ban service is running and enabled
+      service:
+        name: fail2ban
+        state: started
+        enabled: true
+
+  handlers:
+    # Restart fail2ban on config change.
+    - name: Restart fail2ban
+      service:
+        name: fail2ban
+        state: restarted

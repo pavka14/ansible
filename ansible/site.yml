@@ -1,0 +1,44 @@
+---
+# Install Matomo + MariaDB + Nginx + GeoIP2 + phpMyAdmin + SSL
+
+# Install prerequisites
+- import_playbook: prerequisites.yml
+
+# Install extras
+- import_playbook: extras.yml
+
+# Install plain nginx, no extras
+- import_playbook: nginx_plain.yml
+
+# Get SSL and paraphernalia running
+# This needs nginx to be installed already, so it is imported after nginx_plain.yml.
+- import_playbook: ssl.yml
+
+# Install nginx with additions
+- import_playbook: nginx_reinstall.yml
+
+# Install and configure MariaDB, create application database and user
+- import_playbook: maria_db.yml
+
+# Install geoupdate and GeoIP2
+- import_playbook: geoupdate.yml
+
+# Install PHP and extensions
+- import_playbook: php.yml
+
+# Install the PHP applications (Matomo and phpMyAdmin)
+- import_playbook: php_applications.yml
+
+# Save various configurations
+- import_playbook: save_configurations.yml
+
+- hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: Reload nginx
+      # Finally, reload nginx to apply all the new configurations. Do it here and not in the save_configurations
+      # playbook, to make it easier to skip that playbook if no config changes are needed.
+      service:
+        name: nginx
+        state: restarted

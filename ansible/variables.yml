@@ -1,0 +1,13 @@
+# Load secrets and config from exported environment variables
+# DB_NAME, DB_USER, and DB_PASSWORD are for the Matomo database and user, with no special privileges.
+db_name: "{{ lookup('env', 'DB_NAME') }}"
+db_user: "{{ lookup('env', 'DB_USER') }}"
+db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+geoip_account_id: "{{ lookup('env', 'GEOIP_ACCOUNT_ID') }}"
+geoip_license_key: "{{ lookup('env', 'GEOIP_LICENSE_KEY') }}"
+matomo_domain: "{{ lookup('env', 'MATOMO_DOMAIN') }}"
+ssl_email: "{{ lookup('env', 'SSL_EMAIL') }}"
+web_username: "{{ lookup('env', 'WEB_USERNAME') }}"
+web_user_password: "{{ lookup('env', 'WEB_USER_PASSWORD') }}"
+php_version: "8.2"
+mariadb_unix_socket: /run/mysqld/mysqld.sock

@@ -1,0 +1,69 @@
+server {
+    listen 80;
+    server_name {{ matomo_domain }};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name {{ matomo_domain }};
+
+    ssl_certificate /etc/letsencrypt/live/{{ matomo_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ matomo_domain }}/privkey.pem;
+
+    root /var/www/html/matomo;
+    index index.php;
+
+    access_log /var/log/nginx/matomo.access.log;
+    error_log /var/log/nginx/matomo.error.log;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # Serve phpMyAdmin through a symlink at /pma/
+    location ^~ /pma/ {
+        alias /var/www/html/pma/;
+        index index.php index.html index.htm;
+
+        auth_basic "Password Area";
+        auth_basic_user_file /etc/nginx/.web_htpasswd;
+
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/run/php/php{{ php_version }}-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+
+            # phpMyAdmin needs this, Matomo doesn't?
+            fastcgi_param HTTPS on;
+            fastcgi_param HTTP_X_FORWARDED_PROTO https;
+        }
+
+        try_files $uri $uri/ =404;
+    }
+
+    # Skip authentication for matomo.php - it is the public tracking script.
+    location = /matomo.php {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php{{ php_version }}-fpm.sock;
+    }
+
+    # Generic PHP location for other PHP files.
+    location ~ \.php$ {
+        # Password-protect everything which is PHP except matomo.php which is allowed separately above.
+        auth_basic "Matomo Admin Area";
+        auth_basic_user_file /etc/nginx/.web_htpasswd;
+
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php{{ php_version }}-fpm.sock;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|otf)$ {
+        expires max;
+        log_not_found off;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}

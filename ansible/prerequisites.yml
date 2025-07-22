@@ -1,0 +1,32 @@
+---
+######################################################################
+#    Install prerequisites that will be needed for the next steps.   #
+######################################################################
+- name: Install prerequisites
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Install core dependencies
+      apt:
+        name:
+          - software-properties-common
+          - ca-certificates
+          - unzip
+          - curl
+          - wget
+          - gnupg
+          - build-essential
+          - libmaxminddb-dev
+          - libmaxminddb0
+          - mmdb-bin
+          - libpcre3
+          - libpcre3-dev
+          - zlib1g-dev
+          - libssl-dev
+          - lsb-release
+          - apt-transport-https
+          - acl
+        update_cache: yes

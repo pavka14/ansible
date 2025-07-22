@@ -1,0 +1,151 @@
+---
+##############################################
+#    Get LetsEncrypt SSL running on nginx.   #
+##############################################
+# 1. To obtain fullchain.pem, Let's Encrypt should be able to validate the domain with an external call to it.
+#    In other words, DNS records for the domain should point to the server being configured (matomo_domain).
+# 2. nginx should have been installed already for this to work.
+#    It has to be running to serve the "challenge" file to confirm control over the domain.
+- name: Set up certbot and acquire Let's Encrypt certificate
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Check if SSL certificate already exists
+      # This could be left over from a previous run, and Let's Encrypt will not issue a new challenge in that case.
+      stat:
+        path: "/etc/letsencrypt/live/{{ matomo_domain }}/fullchain.pem"
+      register: cert_stat
+
+    - block:
+      # 1. Install certbot.
+      - name: Install certbot
+        apt:
+          name:
+            - certbot
+            - python3-certbot-nginx
+          state: present
+
+      # 2. Generate local artifacts that will be needed in next steps.
+      - name: Generate ACME account private key if missing
+        community.crypto.openssl_privatekey:
+          path: /etc/letsencrypt/account.key
+          size: 4096
+          state: present
+          type: RSA
+          mode: '0600'
+        become: yes
+
+      - name: Ensure directory for Let's Encrypt files exists
+        ansible.builtin.file:
+          path: "/etc/letsencrypt/live/{{ matomo_domain }}"
+          state: directory
+          owner: root
+          group: root
+          mode: '0755'
+        become: yes
+
+      - name: Generate private key if missing
+        community.crypto.openssl_privatekey:
+          path: "/etc/letsencrypt/live/{{ matomo_domain }}/privkey.pem"
+          size: 2048
+          state: present
+        become: yes
+
+      - name: Generate CSR if missing
+        community.crypto.openssl_csr:
+          path: "/etc/letsencrypt/live/{{ matomo_domain }}/{{ matomo_domain }}.csr"
+          privatekey_path: "/etc/letsencrypt/live/{{ matomo_domain }}/privkey.pem"
+          common_name: "{{ matomo_domain }}"
+          state: present
+        become: yes
+
+      # 3. Start acquiring an SSL certificate.
+      - name: Initiate ACME certificate request (first call)
+        community.crypto.acme_certificate:
+          account_key_src: /etc/letsencrypt/account.key
+          account_email: "{{ ssl_email }}"
+          csr: /etc/letsencrypt/live/{{ matomo_domain }}/{{ matomo_domain }}.csr
+          dest: /etc/letsencrypt/live/{{ matomo_domain }}/cert.pem
+          fullchain_dest: /etc/letsencrypt/live/{{ matomo_domain }}/fullchain.pem
+          challenge: http-01
+          terms_agreed: yes
+          acme_version: 2
+          acme_directory: https://acme-v02.api.letsencrypt.org/directory
+        register: acme_response
+
+      # 4. The previous step should have returned a challenge that we need to serve (from a file).
+      - name: Ensure challenge directory exists
+        file:
+          path: /var/www/html/.well-known/acme-challenge
+          state: directory
+          mode: "0755"
+          recurse: yes
+
+      # 5. Save the file in the html directory from which vanilla (default) nginx serves static files.
+      - name: Write HTTP-01 challenge files from response
+        copy:
+          dest: "/var/www/html/{{ item.value['http-01'].resource }}"
+          content: "{{ item.value['http-01'].resource_value }}"
+          mode: "0644"
+        loop: "{{ acme_response.challenge_data | dict2items }}"
+        when: "'http-01' in item.value"
+
+      # 6. Reload nginx. It is now ready to serve the challenge files when they are requested by LetsEncrypt.
+      - name: Reload nginx to serve challenge files
+        service:
+          name: nginx
+          state: reloaded
+
+      # 7. Run the call again. The server should now be verified and a certificate should be issued - save it.
+      - name: Complete ACME certificate request (second call)
+        community.crypto.acme_certificate:
+          account_key_src: /etc/letsencrypt/account.key
+          account_email: "{{ ssl_email }}"
+          csr: /etc/letsencrypt/live/{{ matomo_domain }}/{{ matomo_domain }}.csr
+          dest: /etc/letsencrypt/live/{{ matomo_domain }}/cert.pem
+          fullchain_dest: /etc/letsencrypt/live/{{ matomo_domain }}/fullchain.pem
+          challenge: http-01
+          terms_agreed: yes
+          acme_version: 2
+          acme_directory: https://acme-v02.api.letsencrypt.org/directory
+          data: "{{ acme_response }}"
+
+      # 8. Clean up.
+      - name: Remove .well-known directory after challenge
+        file:
+          path: /var/www/html/.well-known
+          state: absent
+
+      # 9. Make sure it all actually worked. Without fullchain.pem nginx will not be able to serve HTTPS.
+      - name: Check if fullchain.pem was created
+        stat:
+          path: /etc/letsencrypt/live/{{ matomo_domain }}/fullchain.pem
+        register: fullchain_status
+
+      - name: Fail if fullchain.pem does not exist
+        fail:
+          msg: "fullchain.pem was not created! Certificate issuance failed."
+        when: not fullchain_status.stat.exists
+
+      # The block above is only executed if the certificate does not already exist.
+      when: not cert_stat.stat.exists
+
+    # 10. Configure certbot to update the SSL certificate as needed.
+    - name: Enable certbot systemd timer
+      ansible.builtin.systemd:
+        name: certbot.timer
+        enabled: yes
+        state: started
+
+    - name: Confirm certbot.timer is active
+      command: systemctl is-active certbot.timer
+      register: certbot_timer_status
+      changed_when: false
+
+    - name: Show status message
+      debug:
+        msg: "Certbot timer is active and scheduled to run automatically."
+      when: certbot_timer_status.stdout == "active"

@@ -1,0 +1,146 @@
+---
+################################################
+#    Install MariaDB, configure DB and user.   #
+################################################
+- name: Install and configure MariaDB, create database and user
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Ensure the 'universe' repository is enabled
+      apt_repository:
+        repo: 'deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe'
+        state: present
+
+    - name: Install MariaDB server and client from the Ubuntu universe repository
+      apt:
+        name:
+          - mariadb-server
+          - mariadb-client
+        state: present
+        update_cache: yes
+
+    # Cleanup if needed.
+    # There could be an earlier installation of MariaDB; ensure the service is stopped and the data directory is clean.
+    - name: Stop MariaDB service before initialization and cleanup
+      ansible.builtin.service:
+        name: mariadb
+        state: stopped
+      ignore_errors: yes
+
+    - name: Kill any remaining mysqld or mariadbd processes forcefully
+      ansible.builtin.shell: |
+        pids=$(pgrep -x mariadbd || pgrep -x mysqld)
+        if [ -n "$pids" ]; then
+          kill -9 $pids
+          sleep 5
+        fi
+      ignore_errors: yes
+
+    - name: Wait until no MariaDB process is running
+      ansible.builtin.wait_for:
+        timeout: 30
+        state: drained
+        path: /proc/$(pgrep -x mariadbd || pgrep -x mysqld || echo 0)
+      ignore_errors: yes
+
+    # 4.3. Basic DB setup.
+    - name: Ensure MariaDB data directory ownership and permissions
+      ansible.builtin.file:
+        path: /var/lib/mysql
+        owner: mysql
+        group: mysql
+        recurse: yes
+
+    # Initialize MariaDB system tables if not present.
+    - name: Check if mysql.user table exists
+      ansible.builtin.shell: |
+        mysql -u root -e "USE mysql; SHOW TABLES LIKE 'user';" --skip-column-names || echo "not found"
+      register: mysql_user_check
+      ignore_errors: yes
+      changed_when: no
+
+    - name: Initialize MariaDB system tables if missing
+      ansible.builtin.command:
+        cmd: mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
+      when: "'user' not in mysql_user_check.stdout"
+
+    - name: Start and enable MariaDB
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Run mysql_upgrade to fix existing tables
+      ansible.builtin.command:
+        cmd: mysql_upgrade
+
+    # A bit of DB options and settings "hardening".
+    - name: Harden MariaDB installation further
+      block:
+        - name: Ensure MariaDB root user uses unix_socket plugin authentication
+          community.mysql.mysql_user:
+            name: root
+            host: localhost
+            plugin: unix_socket
+            password: ''
+            state: present
+            check_implicit_admin: yes
+            login_unix_socket: "{{ mariadb_unix_socket }}"
+
+        - name: Remove test database
+          community.mysql.mysql_db:
+            name: test
+            state: absent
+            login_user: root
+            login_unix_socket: "{{ mariadb_unix_socket }}"
+
+        - name: Remove anonymous MariaDB users
+          community.mysql.mysql_user:
+            name: ''
+            host_all: yes
+            state: absent
+            login_user: root
+            login_unix_socket: "{{ mariadb_unix_socket }}"
+
+        - name: Remove test privileges
+          community.mysql.mysql_user:
+            name: ''
+            host: localhost
+            priv: 'test.*:ALL'
+            state: absent
+            login_user: root
+            login_unix_socket: "{{ mariadb_unix_socket }}"
+
+        - name: Disallow remote root login except localhost
+          community.mysql.mysql_user:
+            name: root
+            host: "{{ item }}"
+            state: absent
+            login_user: root
+            login_unix_socket: "{{ mariadb_unix_socket }}"
+          loop:
+            - '%'
+            - '::1'
+
+    # Add database and user for the application.
+    - name: Create the application database
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        encoding: utf8mb4
+        collation: utf8mb4_unicode_ci
+        login_user: root
+        login_unix_socket: "{{ mariadb_unix_socket }}"
+
+    - name: Create application user with privileges on new database
+      community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        host: localhost
+        state: present
+        login_user: root
+        login_unix_socket: "{{ mariadb_unix_socket }}"

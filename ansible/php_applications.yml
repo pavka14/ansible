@@ -1,0 +1,34 @@
+---
+##########################################
+#    Install the PHP applications.       #
+##########################################
+- name: Install PHP applications (Matomo and phpMyAdmin)
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Download Matomo latest
+      # Matomo needs to be downloaded and unzipped.
+      get_url:
+        url: https://builds.matomo.org/matomo-latest.zip
+        dest: /tmp/matomo.zip
+
+    - name: Extract to /var/www/html
+      unarchive:
+        src: /tmp/matomo.zip
+        dest: /var/www/html/
+        remote_src: yes
+
+    - name: Set permissions
+      file:
+        path: /var/www/html/matomo
+        recurse: yes
+        owner: www-data
+        group: www-data
+
+    - name: Install phpMyAdmin
+      # phpMyAdmin is available as a package in the default repositories.
+      apt:
+        name: phpmyadmin

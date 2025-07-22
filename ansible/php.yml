@@ -1,0 +1,66 @@
+---
+##########################################
+#    Install PHP extensions and tools.   #
+##########################################
+- name: Install PHP extensions and tools
+  hosts: "{{ target_group }}"
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    - name: Add Ondrej PHP PPA
+      ansible.builtin.apt_repository:
+        repo: 'ppa:ondrej/php'
+        state: present
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Add PHP PPA and install PHP with extensions
+      apt:
+        name:
+          - "php{{ php_version }}"
+          - "php{{ php_version }}-fpm"
+          - "php{{ php_version }}-mysql"
+          - "php{{ php_version }}-curl"
+          - "php{{ php_version }}-mbstring"
+          - "php{{ php_version }}-xml"
+          - "php{{ php_version }}-gd"
+          - "php{{ php_version }}-zip"
+
+    - name: Install PHP PEAR and dev tools for building extensions
+      apt:
+        name:
+          - "php{{ php_version }}-dev"
+          - php-pear
+          - pkg-config
+          - build-essential
+        state: present
+
+    # Get MaxMind DB PHP extension, to enable GeoIP in PHP (Matomo).
+    - name: Install MaxMind DB PHP extension via pecl
+      shell: |
+        if ! pecl list | grep -q "^maxminddb "; then
+          yes '' | pecl install maxminddb
+        fi
+      register: pecl_install
+      changed_when: "'installed' in pecl_install.stdout or pecl_install.rc == 0"
+      failed_when: pecl_install.rc != 0 and 'already installed' not in pecl_install.stdout
+
+    - name: Enable maxminddb extension in PHP
+      copy:
+        dest: "/etc/php/{{ php_version }}/mods-available/maxminddb.ini"
+        content: "extension=maxminddb.so\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable maxminddb extension for CLI and FPM
+      shell: phpenmod maxminddb
+
+    - name: Restart PHP-FPM to load new extension
+      service:
+        name: "php{{ php_version }}-fpm"
+        state: restarted
