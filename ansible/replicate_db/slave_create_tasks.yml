@@ -1,0 +1,156 @@
+- name: Install MariaDB/MySQL client on TARGET
+  apt:
+    name: mariadb-client
+    state: present
+    update_cache: true
+
+# If already configured as a slave, stop this first to avoid conflicts with the next step.
+- name: Stop slave on TARGET (ignore if not configured yet)
+  shell: >
+    mysql --socket={{ target_mariadb_unix_socket }} -e "STOP REPLICA;"
+  register: stop_slave_result
+  failed_when: false
+  changed_when: "'ERROR' not in stop_slave_result.stderr"
+
+- name: Create empty target database on TARGET
+  community.mysql.mysql_db:
+    login_unix_socket: "{{ target_mariadb_unix_socket }}"
+    name: "{{ db_name }}"
+    state: present
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+  register: target_db_created
+
+- name: Abort if target database already existed (safety)
+  fail:
+    msg: "Target database '{{ db_name }}' already exists on TARGET. Aborting to prevent overwrite."
+  when: target_db_created.changed == false
+
+- name: Grant all privileges on target database to existing user
+  community.mysql.mysql_user:
+    name: "{{ target_application_user }}"
+    host: "localhost"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_unix_socket: "{{ target_mariadb_unix_socket }}"
+
+- set_fact:
+    dump_file: "/tmp/{{ db_name }}_dump.sql"
+
+- name: Dump database from SOURCE to local file
+  shell: |
+    set -x
+    mysqldump -h {{ groups['source_host'][0] }} \
+      -u {{ target_db_user }} \
+      -p'{{ target_db_password }}' \
+      --single-transaction --master-data=2 --quick --routines --triggers --events \
+      {{ db_name }} \
+      > "{{ dump_file }}"
+  args:
+    executable: /bin/bash
+  register: dump_result
+
+- name: Import database dump into TARGET
+  shell: |
+    set -x
+    mysql -u root {{ db_name }} < "{{ dump_file }}"
+  args:
+    executable: /bin/bash
+  register: import_result
+
+- name: Extract CHANGE MASTER line from dump
+  shell: |
+    grep -m1 '^-- CHANGE MASTER' "{{ dump_file }}" | sed 's/^-- //'
+  args:
+    executable: /bin/bash
+  register: master_change_line
+
+- name: Check master_change_line
+  debug:
+    var: master_change_line
+
+- name: Set MariaDB GTID replication config on TARGET
+  ansible.builtin.copy:
+    dest: "{{ target_mariadb_conf_dir }}/replication.cnf"
+    content: |
+      [mysqld]
+      server-id = {{ target_server_id }}
+      binlog_format = mixed
+      gtid_domain_id = 0
+      log_slave_updates = 1
+      read_only = 1
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart mysql on target
+
+- meta: flush_handlers
+
+- name: Stop slave on TARGET again (ignore if not configured yet)
+  # Slave_SQL_Running is "yes" after restart by default? So stop it again explicitly to be sure.
+  shell: >
+    mysql --socket={{ target_mariadb_unix_socket }} -e "STOP REPLICA;"
+  register: stop_slave_result
+  failed_when: false
+  changed_when: "'ERROR' not in stop_slave_result.stderr"
+
+- name: Configure replication on TARGET using GTID from dump
+  community.mysql.mysql_query:
+    login_unix_socket: "{{ target_mariadb_unix_socket }}"
+    login_user: root
+    query: >
+      {{ master_change_line.stdout | regex_replace(';$', '') }},
+      MASTER_HOST='{{ groups['source_host'][0] }}',
+      MASTER_USER='{{ target_db_user }}',
+      MASTER_PASSWORD='{{ target_db_password }}';
+
+- name: Start slave on TARGET
+  become: yes
+  no_log: true
+  shell: >
+    mysql --socket={{ target_mariadb_unix_socket }} -e "START REPLICA;"
+
+- name: Check slave status on TARGET (shell)
+  shell: |
+    mysql --socket={{ target_mariadb_unix_socket }} -e "SHOW SLAVE STATUS\G"
+  register: slave_status_shell
+
+- name: Print slave status output
+  debug:
+    var: slave_status_shell.stdout
+
+- name: Check slave status on TARGET until running and caught up
+  community.mysql.mysql_query:
+    login_unix_socket: "{{ target_mariadb_unix_socket }}"
+    login_user: root
+    query: "SHOW SLAVE STATUS"
+  register: slave_status
+  until: >
+    slave_status.query_result | length > 0 and
+    (slave_status.query_result[0][0].Slave_IO_Running == 'Yes') and
+    (slave_status.query_result[0][0].Slave_SQL_Running == 'Yes') and
+    (slave_status.query_result[0][0].Seconds_Behind_Master is not none) and
+    (slave_status.query_result[0][0].Seconds_Behind_Master == 0)
+  retries: 10
+  delay: 60
+  failed_when: >
+    (
+      (slave_status.query_result | length > 0) and
+      (slave_status.query_result[0][0].Last_IO_Error is defined) and
+      ('Fatal error' in (slave_status.query_result[0][0].Last_IO_Error | default('') | string))
+    )
+    or
+    (slave_status.failed | default(false))
+
+- name: Print slave_status query output
+  debug:
+    var: slave_status
+
+- name: Print Seconds_Behind_Master after each retry
+  debug:
+    msg: "Seconds_Behind_Master: {{ slave_status.query_result[0][0].Seconds_Behind_Master | default('N/A') }}"
+  when: slave_status.query_result | length > 0
+
+- name: Show final slave status on TARGET
+  debug:
+    var: slave_status.query_result[0]

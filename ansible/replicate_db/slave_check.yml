@@ -1,0 +1,42 @@
+---
+- name: Load variables from file
+  hosts: target_host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+  tasks:
+    - import_tasks: add_known_hosts.yml
+
+    - name: Check slave status on TARGET until running and caught up
+      community.mysql.mysql_query:
+        login_unix_socket: "{{ target_mariadb_unix_socket }}"
+        login_user: root
+        query: "SHOW SLAVE STATUS"
+      register: slave_status
+      until: >
+        slave_status.query_result | length > 0 and
+        (slave_status.query_result[0][0].Slave_IO_Running == 'Yes') and
+        (slave_status.query_result[0][0].Slave_SQL_Running == 'Yes') and
+        (slave_status.query_result[0][0].Seconds_Behind_Master is not none) and
+        (slave_status.query_result[0][0].Seconds_Behind_Master == 0)
+      retries: 10
+      delay: 60
+      failed_when: >
+        (
+          (slave_status.query_result | length > 0) and
+          (slave_status.query_result[0][0].Last_IO_Error is defined) and
+          ('Fatal error' in (slave_status.query_result[0][0].Last_IO_Error | default('') | string))
+        )
+        or
+        (slave_status.failed | default(false))
+
+    - name: Print Seconds_Behind_Master after each retry
+      debug:
+        msg: "Seconds_Behind_Master: {{ slave_status.query_result[0][0].Seconds_Behind_Master | default('N/A') }}"
+      when: slave_status.query_result | length > 0
+
+    - name: Show full slave status on TARGET
+      debug:
+        var: slave_status.query_result[0]

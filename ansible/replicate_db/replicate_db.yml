@@ -1,0 +1,11 @@
+---
+- name: Load variables from file
+  hosts: all
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+  tasks:
+    - import_tasks: add_known_hosts.yml
+    - import_tasks: master_create_tasks.yml
+    - import_tasks: slave_create_tasks.yml

@@ -1,0 +1,20 @@
+---
+- name: Load variables from file
+  hosts: source_host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+  tasks:
+    - import_tasks: add_known_hosts.yml
+    - import_tasks: master_create_tasks.yml
+
+  handlers:
+    # Called with "notify" from a task which relies on having this exact name -
+    # which is case-sensitive, so change in both places if editing.
+    - name: Restart mysql on source
+      become: true
+      service:
+        name: mariadb
+        state: restarted
