@@ -12,7 +12,7 @@ This is an install from scratch, resulting with an empty Matomo - which you then
 
 If you want to migrate an existing Matomo installation, you can run this playbook and then the [Replicate MariaDB playbook](replicate_db/replicate_db.md) on top.
 
-Prerequisites:
+**Prerequisites**
  - Ansible installed on the machine where this will run from (tested with version 2.16.3.)
  - A server running Ubuntu (tested on version 24.04)
  - SSH access to the server with a user that has sudo privileges
@@ -44,7 +44,7 @@ What the playbook will do (in order of appearance):
    - allow the nginx user to read the phpMyAdmin code
    - create nginx server configuration from Jinja templates
 
-What the end result should be:
+**What the end result should be**
  - a working Matomo installation, accessible via the domain or subdomain you set in the .env file, with configured SSL
  - a working phpMyAdmin installation, accessible via the above domain or subdomain plus a "/pma/" path
  - basic authentication for both Matomo and phpMyAdmin (excluding the javascript tracking code for Matomo and the public tracking endpoint)
@@ -58,7 +58,8 @@ nano .env
 ```
 Add your settings, Ctrl+X to exit, confirm "Save changes" with "Y".
 
-# Then export the variables into your shell:
+Then export the variables into your shell:
+
 ```bash
 export $(grep -v '^#' .env | xargs)
 ```
@@ -75,6 +76,8 @@ Or, if you want to run the playbook on the local machine (i.e. the target is loc
 ansible-playbook -i inventory.ini site.yml -e target_group=local
 ```
 
+**Notes**
+
 There is no default value for the `target_group` variable and this is deliberate! Errors in both directions can be costly.
 
 You can run the whole playbook as above, or each of the sub-books individually (change site.yml in the command above to the name of the sub-book you want to run).
@@ -82,3 +85,24 @@ You can run the whole playbook as above, or each of the sub-books individually (
 They should be independent; of course, you need to have run prerequisites.yml first.
 
 The exceptions are nginx_reinstall.yml and ssl.yml, both of which need nginx to be present already (ssl.yml can work with both the initial vanilla Nginx and the re-installed one).
+
+There are two nginx configuration templates, a general server template and one having GeoIP2 values only. You can edit them to customise your setup. 
+If you want country and city names in a language other than English, the options to change that are in the geoip2_nginx.conf.j2 template.
+
+**After install**
+
+You will end up with a working Matomo and phpMyAdmin installation, but you will need to do some configuration via the web interface.
+
+Specifically for Matomo, you will need to create the first admin user and set up the tracking code for your website(s). 
+
+Then, in order to use the nginx GeoIP2 module, you will need to configure Matomo to use through the System / Geolocation settings menu.
+
+Additionally, you may want to set up a cron job to run the Matomo core:archive command regularly, as described in the Matomo documentation.
+
+These can probalbly be automated through the playbook as well, but are for now on the 'to do" list.
+
+**Status of this project**
+
+It worked on my machine once. In other words: it did the job, was then refactored, and was not tested again end-to-end on a clean server.
+
+Anyone who tests it out, please submit a pull request or open an issue with comments and improvements.
