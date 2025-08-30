@@ -40,6 +40,7 @@
         state: present
 
     # Get MaxMind DB PHP extension, to enable GeoIP in PHP (Matomo).
+    # TODO Debug this, this may not actually be enough, because maxminddb shows as not working in PHP?
     - name: Install MaxMind DB PHP extension via pecl
       shell: |
         if ! pecl list | grep -q "^maxminddb "; then

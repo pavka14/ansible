@@ -1,0 +1,20 @@
+---
+- name: Ensure the source host's fingerprint is added to known_hosts
+  ansible.builtin.known_hosts:
+    path: "{{ lookup('env', 'HOME') }}/.ssh/known_hosts"
+    name: "{{ groups['source_host'][0] }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -t rsa ' ~ groups['source_host'][0] ~ ' 2>/dev/null') }}"
+    state: present
+  delegate_to: localhost
+
+- name: Ensure the target host's fingerprint is added to known_hosts (if not local)
+  ansible.builtin.known_hosts:
+    path: "{{ lookup('env', 'HOME') }}/.ssh/known_hosts"
+    name: "{{ groups['target_host'][0] }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -t rsa ' ~ groups['target_host'][0] ~ ' 2>/dev/null') }}"
+    state: present
+  when: groups['target_host'][0] not in ['localhost', '127.0.0.1']
+  delegate_to: localhost
+
+  vars:
+    ansible_ssh_common_args: "-o ServerAliveInterval=60 -o ServerAliveCountMax=120"

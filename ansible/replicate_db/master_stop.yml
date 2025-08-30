@@ -1,0 +1,54 @@
+---
+- name: Load variables from file
+  hosts: source_host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+  tasks:
+    - import_tasks: add_known_hosts.yml
+
+    - name: Remove replication config if it exists
+      ansible.builtin.file:
+        path: "{{ source_mariadb_conf_dir }}/replication.cnf"
+        state: absent
+      ignore_errors: yes
+
+    - name: Restart mysql on source
+      become: true
+      service:
+        name: mariadb
+        state: restarted
+
+    - name: Close MariaDB port in firewall
+      firewalld:
+        port: 3306/tcp
+        permanent: true
+        state: disabled
+        immediate: true
+      ignore_errors: true
+
+    - name: Disallow MySQL connections via SELinux (revert)
+      command: setsebool -P mysql_connect_any off
+      ignore_errors: true
+
+    - name: Remove replication user if exists
+      community.mysql.mysql_user:
+        name: "{{ target_db_user }}"
+        host: "%"
+        state: absent
+        login_user: root
+        login_unix_socket: "{{ source_mariadb_unix_socket }}"
+
+    - name: Flush MySQL privileges
+      community.mysql.mysql_query:
+        login_user: root
+        login_unix_socket: "{{ source_mariadb_unix_socket }}"
+        query: "FLUSH PRIVILEGES;"
+
+    - name: Remove binlog directory and all its contents
+      file:
+        path: "{{ source_binlog_dir }}"
+        state: absent
+      ignore_errors: true

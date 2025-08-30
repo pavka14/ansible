@@ -1,0 +1,50 @@
+---
+- name: Load variables from file
+  hosts: target_host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+  tasks:
+    - import_tasks: add_known_hosts.yml
+
+    - name: Remove dump_file if it exists
+      ansible.builtin.file:
+        path: "/tmp/{{ db_name }}_dump.sql"
+        state: absent
+      ignore_errors: yes
+
+    - name: Stop slave on TARGET (ignore if not configured yet)
+      shell: >
+        mysql --socket={{ target_mariadb_unix_socket }} -e "STOP REPLICA;"
+      register: stop_slave_result
+      failed_when: false
+      changed_when: "'ERROR' not in stop_slave_result.stderr"
+
+    - name: Set server to read/write mode
+      community.mysql.mysql_query:
+        login_unix_socket: "{{ target_mariadb_unix_socket }}"
+        login_user: root
+        query: "SET GLOBAL read_only = OFF;"
+
+    - name: Remove MariaDB replication config if it exists
+      ansible.builtin.file:
+        path: "{{ target_mariadb_conf_dir }}/replication.cnf"
+        state: absent
+      ignore_errors: yes
+
+    - name: Restart mysql on TARGET
+      become: true
+      service:
+        name: mariadb
+        state: restarted
+
+    - name: Check slave status on TARGET (shell)
+      shell: |
+        mysql --socket={{ target_mariadb_unix_socket }} -e "SHOW SLAVE STATUS\G"
+      register: slave_status_shell
+
+    - name: Print slave status output
+      debug:
+        var: slave_status_shell.stdout

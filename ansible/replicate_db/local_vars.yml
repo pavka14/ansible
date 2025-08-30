@@ -1,0 +1,17 @@
+# How the source database is set up.
+source_mariadb_conf_dir: /etc/my.cnf.d
+source_mariadb_unix_socket: /var/lib/mysql/mysql.sock
+source_binlog_dir: /var/lib/mysql/binlogs
+source_server_id: 1
+
+# Same database name on source and target.
+db_name: mt
+
+# How the target database is set up.
+target_mariadb_unix_socket: /run/mysqld/mysqld.sock
+target_mariadb_conf_dir: /etc/mysql/mariadb.conf.d
+target_server_id: 101
+# Database user which will be created on the SOURCE database, which will use that access to copy the data across to TARGET.
+target_db_user: replication_user
+target_db_password: replication_password
+target_application_user: matomo

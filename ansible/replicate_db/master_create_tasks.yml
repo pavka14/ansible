@@ -1,0 +1,93 @@
+# Setup replication from source to target database, with streaming data dump
+- name: Setup replication from source database
+  hosts: source_host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - local_vars.yml
+
+#- name: Ensure PyMySQL is installed on source_host
+# This could be differently named on e.g. RHEL/CentOS.
+# apt:
+#    name: python3-pymysql
+#   state: present
+#    update_cache: true
+#  become: yes
+
+- name: Ensure binlog directory exists and is owned by mysql
+  file:
+    path: "{{ source_binlog_dir }}"
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0755'
+
+- name: Create MariaDB replication config file with GTID enabled
+  ansible.builtin.copy:
+    dest: "{{ source_mariadb_conf_dir }}/replication.cnf"
+    content: |
+      [mysqld]
+      bind-address = 0.0.0.0
+      server-id = {{ source_server_id }}
+      log_bin = {{ source_binlog_dir }}/mysql-bin.log
+      log-basename = master1
+      binlog_format = mixed
+      binlog-do-db = {{ db_name }}
+      expire_logs_days = 7
+      max_binlog_size = 100M
+      gtid_domain_id = 0
+      log_slave_updates = 1
+      sync_binlog = 1
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart mysql on source
+
+- name: Open MariaDB port in firewall
+  firewalld:
+    port: 3306/tcp
+    permanent: true
+    state: enabled
+    immediate: true
+  ignore_errors: true
+
+- name: Allow MySQL connections via SELinux (if enabled)
+  command: setsebool -P mysql_connect_any on
+  ignore_errors: true
+
+# Clean up potential mess from previous runs.
+- name: Remove replication user if exists (to reset privileges)
+  community.mysql.mysql_user:
+    name: "{{ target_db_user }}"
+    host: "%"
+    state: absent
+    login_user: root
+    login_unix_socket: "{{ source_mariadb_unix_socket }}"
+
+- name: Grant global replication privileges
+  community.mysql.mysql_user:
+    name: "{{ target_db_user }}"
+    password: "{{ target_db_password }}"
+    host: "%"
+    priv: "*.*:REPLICATION SLAVE,REPLICATION CLIENT"
+    state: present
+    append_privs: true
+    login_user: root
+    login_unix_socket: "{{ source_mariadb_unix_socket }}"
+
+- name: Grant database-level privileges
+  community.mysql.mysql_user:
+    name: "{{ target_db_user }}"
+    password: "{{ target_db_password }}"
+    host: "%"
+    priv: "{{ db_name }}.*:EVENT,SELECT,SHOW VIEW,TRIGGER,LOCK TABLES"
+    state: present
+    append_privs: true
+    login_user: root
+    login_unix_socket: "{{ source_mariadb_unix_socket }}"
+
+- name: Flush MySQL privileges
+  community.mysql.mysql_query:
+    login_user: root
+    login_unix_socket: "{{ source_mariadb_unix_socket }}"
+    query: "FLUSH PRIVILEGES;"
