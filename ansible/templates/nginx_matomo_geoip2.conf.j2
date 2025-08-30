@@ -46,6 +46,18 @@ server {
     location = /matomo.php {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php{{ php_version }}-fpm.sock;
+
+        # GeoIP2 parameters to be passed on to Matomo through a server variable which PHP can access.
+        # These are only needed for the public-facing tracking endpoint, which is matomo.php.
+        fastcgi_param MM_CONTINENT_CODE $geoip2_data_continent_code;
+        fastcgi_param MM_CONTINENT_NAME $geoip2_data_continent_name;
+        fastcgi_param MM_COUNTRY_CODE $geoip2_data_country_code;
+        fastcgi_param MM_COUNTRY_NAME $geoip2_data_country_name;
+        fastcgi_param MM_REGION_CODE $geoip2_data_region_code;
+        fastcgi_param MM_REGION_NAME $geoip2_data_region_name;
+        fastcgi_param MM_CITY_NAME $geoip2_data_city_name;
+        fastcgi_param MM_LATITUDE $geoip2_data_latitude;
+        fastcgi_param MM_LONGITUDE $geoip2_data_longitude;
     }
 
     # Generic PHP location for other PHP files.
