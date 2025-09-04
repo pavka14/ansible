@@ -16,7 +16,7 @@ This repository contains Ansible playbooks for deploying Matomo (web analytics p
 - **Network restriction**: `ansible-galaxy collection install` commands will fail due to sandbox limitations
 
 ### Basic Setup and Configuration
-- Always work from the `ansible/` directory: `cd /home/runner/work/ansible/ansible/ansible`
+- Always work from the `ansible/deploy-matomo/` directory: `cd /home/runner/work/ansible/ansible/ansible/deploy-matomo`
 - Copy the environment template: `cp .env.example .env`
 - Edit `.env` with your specific settings (domain, passwords, MaxMind credentials)
 - Load environment variables: `export $(grep -v '^#' .env | xargs)`
@@ -58,13 +58,13 @@ When adding new playbooks to the repository, follow these principles:
 Current playbook structure allows individual execution of components. Each playbook is self-contained and can be validated independently using the commands above.
 
 ## Database Replication
-Located in `ansible/replicate_db/` directory - separate functionality for migrating existing Matomo installations.
+Located in `ansible/replicate_mariadb/` directory - separate functionality for migrating existing Matomo installations.
 
 **WARNING**: Use validation commands only - do not execute replication playbooks without explicit approval.
 
 For validation only:
 ```bash
-cd ansible/replicate_db/
+cd ansible/replicate_mariadb/
 ansible-playbook -i inventory.ini --syntax-check replicate_db.yml
 ```
 
@@ -94,23 +94,24 @@ ansible-playbook -i inventory.ini --syntax-check replicate_db.yml
 ├── .github/
 │   └── copilot-instructions.md  # GitHub Copilot instructions
 └── ansible/                    # Main Ansible directory
-    ├── .env.example            # Environment template  
-    ├── inventory.ini           # Server inventory
-    ├── site.yml               # Main orchestration playbook
-    ├── variables.yml          # Variable definitions
-    ├── [individual playbooks] # Component-specific playbooks
-    ├── templates/             # Jinja2 configuration templates
-    └── replicate_db/          # Database replication playbooks
+    ├── deploy-matomo/          # Main deployment playbooks
+    │   ├── .env.example        # Environment template  
+    │   ├── inventory.ini       # Server inventory
+    │   ├── site.yml           # Main orchestration playbook
+    │   ├── variables.yml      # Variable definitions
+    │   ├── [individual playbooks] # Component-specific playbooks
+    │   └── templates/         # Jinja2 configuration templates
+    └── replicate_mariadb/     # Database replication playbooks
         ├── replicate_db.yml   # Main replication playbook
         └── [support files]    # Additional replication components
 ```
 
 ### Key Configuration Files
-- **Main playbook**: `ansible/site.yml` 
-- **Environment variables**: `ansible/.env.example` (copy to `.env`)
-- **Server inventory**: `ansible/inventory.ini`
-- **Variable definitions**: `ansible/variables.yml`
-- **Configuration templates**: `ansible/templates/`
+- **Main playbook**: `ansible/deploy-matomo/site.yml` 
+- **Environment variables**: `ansible/deploy-matomo/.env.example` (copy to `.env`)
+- **Server inventory**: `ansible/deploy-matomo/inventory.ini`
+- **Variable definitions**: `ansible/deploy-matomo/variables.yml`
+- **Configuration templates**: `ansible/deploy-matomo/templates/`
 
 ## Deploy Matomo Playbook Limitations and Requirements
 
