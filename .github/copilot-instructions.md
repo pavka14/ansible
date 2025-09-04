@@ -24,55 +24,48 @@ This repository contains Ansible playbooks for deploying Matomo (web analytics p
 
 ### Validation and Testing Commands
 Run these commands before making changes:
-- **Syntax validation**: `ansible-playbook -i inventory.ini --syntax-check -e target_group=local site.yml` (< 1 second, may fail on community modules due to network restrictions)
+- **Syntax validation**: `ansible-playbook -i inventory.ini --syntax-check <playbook.yml>` (< 1 second, may fail on community modules due to network restrictions)
 - **YAML linting**: `yamllint .` (< 1 second, will show warnings and errors) 
-- **Ansible linting**: `ansible-lint prerequisites.yml` (< 5 seconds, test individual playbooks)
-- **Dry run test**: `ansible-playbook -i inventory.ini --check -e target_group=local prerequisites.yml` (< 5 seconds, NEVER CANCEL)
+- **Ansible linting**: `ansible-lint <playbook.yml>` (< 5 seconds, test individual playbooks)
+- **Dry run validation**: `ansible-playbook -i inventory.ini --check <playbook.yml>` (< 5 seconds, validation only - do not execute)
 
-**NOTE**: Full site.yml syntax check and ansible-lint will fail due to missing community collections in sandbox environment.
+**NOTE**: Syntax checks and ansible-lint will fail on playbooks using community collections due to missing dependencies in sandbox environment.
 
-### Deployment Commands
-**WARNING**: Full deployment requires actual Ubuntu servers and takes 45+ minutes. NEVER CANCEL builds.
+### Validation Commands
+**WARNING**: Use validation commands only - do not execute playbooks in sandbox environment.
 
-For local testing (limited functionality in sandbox):
+For syntax validation:
 ```bash
 export $(grep -v '^#' .env | xargs)
-ansible-playbook -i inventory.ini -e target_group=local site.yml
+ansible-playbook -i inventory.ini --syntax-check <playbook.yml>
 ```
 
-For remote servers:
+For dry-run validation:
 ```bash
 export $(grep -v '^#' .env | xargs) 
-ansible-playbook -i inventory.ini -e target_group=matomo_servers site.yml
+ansible-playbook -i inventory.ini --check <playbook.yml>
 ```
 
-Expected deployment time: **45-60 minutes minimum**. NEVER CANCEL. Set timeout to 90+ minutes.
+**NOTE**: Replace `<playbook.yml>` with the actual playbook filename. Validation only - never execute playbooks without explicit approval.
 
-### Individual Playbooks
-You can run individual components separately:
-- `prerequisites.yml` - Install system dependencies (< 5 minutes)
-- `extras.yml` - Install Fail2ban security (< 2 minutes) 
-- `nginx_plain.yml` - Install basic nginx (< 5 minutes)
-- `ssl.yml` - Configure SSL certificates (< 10 minutes, requires nginx)
-- `nginx_reinstall.yml` - Rebuild nginx with GeoIP2 (< 20 minutes, NEVER CANCEL)
-- `maria_db.yml` - Install and configure MariaDB (< 10 minutes)
-- `geoupdate.yml` - Install GeoIP2 database updates (< 5 minutes)
-- `php.yml` - Install PHP and extensions (< 5 minutes)
-- `php_applications.yml` - Install Matomo and phpMyAdmin (< 10 minutes)
-- `save_configurations.yml` - Save final configurations (< 2 minutes)
+### Modular Playbook Design
+When adding new playbooks to the repository, follow these principles:
+- **Modularity**: Design playbooks to run independently without requiring execution of other playbooks
+- **Separation of concerns**: Each playbook should handle a specific component or service
+- **Reusability**: Create playbooks that can be used in different deployment scenarios
+- **Clear dependencies**: If dependencies exist, document them clearly in the playbook comments
+
+Current playbook structure allows individual execution of components. Each playbook is self-contained and can be validated independently using the commands above.
 
 ## Database Replication
-Located in `replicate_db/` directory - separate functionality for migrating existing Matomo installations:
+Located in `ansible/replicate_db/` directory - separate functionality for migrating existing Matomo installations.
 
-Setup commands:
-```bash
-cd replicate_db/
-ansible-galaxy collection install community.mysql community.general ansible.posix
-```
+**WARNING**: Use validation commands only - do not execute replication playbooks without explicit approval.
 
-Main replication playbook (NEVER CANCEL - can take 30+ minutes):
+For validation only:
 ```bash
-ansible-playbook -i inventory.ini replicate_db.yml -e target_group=local
+cd ansible/replicate_db/
+ansible-playbook -i inventory.ini --syntax-check replicate_db.yml
 ```
 
 ## Validation Scenarios
@@ -98,23 +91,18 @@ ansible-playbook -i inventory.ini replicate_db.yml -e target_group=local
 ```
 .
 ├── README.md                    # Main documentation
-├── ansible/
-│   ├── .env.example            # Environment template  
-│   ├── inventory.ini           # Server inventory
-│   ├── site.yml               # Main orchestration playbook
-│   ├── variables.yml          # Variable definitions
-│   ├── prerequisites.yml      # System dependencies
-│   ├── extras.yml             # Security tools (Fail2ban)
-│   ├── nginx_plain.yml        # Basic nginx installation
-│   ├── ssl.yml                # SSL certificate setup
-│   ├── nginx_reinstall.yml    # Nginx rebuild with GeoIP2
-│   ├── maria_db.yml           # MariaDB installation
-│   ├── geoupdate.yml          # GeoIP2 database setup
-│   ├── php.yml                # PHP and extensions
-│   ├── php_applications.yml   # Matomo and phpMyAdmin
-│   ├── save_configurations.yml # Final configuration
-│   ├── templates/             # Jinja2 configuration templates
-│   └── replicate_db/          # Database replication playbooks
+├── .github/
+│   └── copilot-instructions.md  # GitHub Copilot instructions
+└── ansible/                    # Main Ansible directory
+    ├── .env.example            # Environment template  
+    ├── inventory.ini           # Server inventory
+    ├── site.yml               # Main orchestration playbook
+    ├── variables.yml          # Variable definitions
+    ├── [individual playbooks] # Component-specific playbooks
+    ├── templates/             # Jinja2 configuration templates
+    └── replicate_db/          # Database replication playbooks
+        ├── replicate_db.yml   # Main replication playbook
+        └── [support files]    # Additional replication components
 ```
 
 ### Key Configuration Files
@@ -122,55 +110,46 @@ ansible-playbook -i inventory.ini replicate_db.yml -e target_group=local
 - **Environment variables**: `ansible/.env.example` (copy to `.env`)
 - **Server inventory**: `ansible/inventory.ini`
 - **Variable definitions**: `ansible/variables.yml`
-- **Nginx templates**: `ansible/templates/`
+- **Configuration templates**: `ansible/templates/`
 
-### Frequently Used Commands
-```bash
-# Always run from ansible/ directory
-cd /home/runner/work/ansible/ansible/ansible
-
-# Basic validation sequence
-cp .env.example .env
-export $(grep -v '^#' .env | xargs)
-
-# Test individual playbooks that work in sandbox
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local prerequisites.yml
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local extras.yml  
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local nginx_plain.yml
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local geoupdate.yml
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local php.yml
-ansible-playbook -i inventory.ini --syntax-check -e target_group=local php_applications.yml
-
-# YAML linting (works for all files)
-yamllint .
-
-# Dry run testing (safe in sandbox for these playbooks)
-ansible-playbook -i inventory.ini --check -e target_group=local prerequisites.yml
-ansible-playbook -i inventory.ini --check -e target_group=local extras.yml
-
-# Do NOT test these due to missing collections:
-# ssl.yml, nginx_reinstall.yml, maria_db.yml, save_configurations.yml, site.yml
-```
-
-## Limitations and Warnings
+## Deploy Matomo Playbook Limitations and Requirements
 
 ### Sandbox Environment Limitations
 - **Network restrictions**: Cannot download external packages (nginx source, MaxMind databases) or access ansible-galaxy
-- **Missing collections**: Community collections are not accessible, causing syntax check failures on ssl.yml, maria_db.yml, and save_configurations.yml
+- **Missing collections**: Community collections are not accessible, causing syntax check failures on SSL and database playbooks
 - **Service management**: Cannot start/stop system services like nginx, MariaDB
 - **SSL certificate generation**: Cannot obtain real SSL certificates from Let's Encrypt
-- **Full deployment impossible**: Use dry run mode (`--check`) for testing changes on individual playbooks only
+- **Validation only**: Use dry run mode (`--check`) for testing changes on individual playbooks only
 
 ### Build and Timing Expectations  
 - **Syntax checks**: < 1 second per playbook
 - **Linting**: < 30 seconds for full repository
-- **Dry run testing**: < 30 seconds (safe in sandbox)
-- **Full deployment**: 45-90 minutes (requires real servers, NEVER CANCEL)
-- **Database replication**: 30-60 minutes (NEVER CANCEL)
+- **Dry run validation**: < 30 seconds (safe in sandbox)
+- **Full deployment**: 45-90 minutes (requires real servers, validation only in sandbox)
 
 ### Required External Dependencies
 - MaxMind GeoIP2 account and license key (free account sufficient)
 - Ubuntu 24.04 target servers with sudo access
 - SSL certificate email address for Let's Encrypt
 
-Always verify changes with syntax validation and linting before attempting deployment.
+## Replicate MariaDB Playbook Limitations and Requirements
+
+### Sandbox Environment Limitations
+- **Database connectivity**: Cannot connect to actual MariaDB instances
+- **SSH access**: Cannot establish SSH connections for replication setup
+- **File transfers**: Cannot transfer database dumps between servers
+- **Validation only**: Use syntax check and dry run modes only
+
+### Build and Timing Expectations
+- **Syntax checks**: < 1 second per playbook component
+- **Linting**: < 10 seconds for replication directory
+- **Dry run validation**: < 10 seconds (safe in sandbox)
+- **Full replication**: 30-60 minutes (requires real servers, validation only in sandbox)
+
+### Required External Dependencies
+- Source MariaDB server with existing Matomo database
+- Target MariaDB server for replication setup
+- SSH access between servers
+- Network connectivity between database servers
+
+Always verify changes with syntax validation and linting before attempting any deployment or replication operations.
