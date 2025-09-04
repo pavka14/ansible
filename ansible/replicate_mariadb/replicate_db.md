@@ -1,6 +1,6 @@
 **Copy MariaDB database from one server to another and set up replication**
 
-This playbook is a continuation of the [Install Matomo /phpMyAdmin playbook](../README.md) and is intended for the case where 
+This playbook is a continuation of the [Install Matomo /phpMyAdmin playbook](../deploy-matomo/README.md) and is intended for the case where 
 you do not just need an empty Matomo installation, but want to move a running instance to a new server.
 
 Of course, there is nothing Matomo-specific in it, so you can use it for any MariaDB database replication.
