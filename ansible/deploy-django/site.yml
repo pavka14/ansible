@@ -1,0 +1,27 @@
+---
+- name: Deploy Django stack
+  hosts: django_servers
+  become: yes
+  gather_facts: yes
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: Run prerequisites
+      import_playbook: prerequisites.yml
+    - name: Run Postgres setup
+      import_playbook: postgres.yml
+    - name: Run Python/venv setup
+      import_playbook: python.yml
+    - name: Run Redis setup
+      import_playbook: redis.yml
+    - name: Run Nginx setup
+      import_playbook: nginx.yml
+    - name: Run GeoIP2 database setup
+      import_playbook: geoupdate.yml
+    - name: Setup SSL with Let's Encrypt
+      import_playbook: ssl.yml
+    - name: Deploy Django app
+      import_playbook: django.yml
+    - name: Setup Uvicorn systemd service
+      import_playbook: uvicorn.yml
+

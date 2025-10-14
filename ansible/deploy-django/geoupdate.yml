@@ -1,0 +1,66 @@
+---
+# install geoupdate and GeoIP2. Used by nginx (through a nginx module).
+- name: Install geoupdate and GeoIP2
+  hosts: django_servers
+  vars_files:
+    - variables.yml
+  become: yes
+  gather_facts: no
+
+  tasks:
+    # Install and configure geoipupdate.
+    - name: Install geoipupdate
+      apt:
+        name: geoipupdate
+        state: present
+
+    - name: Configure geoipupdate
+      copy:
+        dest: /etc/GeoIP.conf
+        mode: 0600
+        content: |
+          AccountID {{ geoip_account_id }}
+          LicenseKey {{ geoip_license_key }}
+          EditionIDs GeoLite2-Country GeoLite2-City
+          DatabaseDirectory /usr/share/GeoIP2
+
+    - name: Create geoip directory
+      file:
+        path: /usr/share/GeoIP2
+        state: directory
+
+    - name: Download initial databases
+      command: geoipupdate
+
+    - name: Setup systemd service
+      copy:
+        dest: /etc/systemd/system/geoipupdate.service
+        content: |
+          [Unit]
+          Description=GeoIP2 database update
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/geoipupdate
+
+    # Make sure geoipupdate is updated regularly.
+    - name: Setup systemd timer
+      copy:
+        dest: /etc/systemd/system/geoipupdate.timer
+        content: |
+          [Unit]
+          Description=Weekly GeoIP2 update
+
+          [Timer]
+          OnCalendar=weekly
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable geoipupdate timer
+      systemd:
+        name: geoipupdate.timer
+        enabled: yes
+        state: started
+

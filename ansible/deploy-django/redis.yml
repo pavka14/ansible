@@ -1,0 +1,17 @@
+---
+- name: Install and configure Redis
+  hosts: django_servers
+  become: yes
+  gather_facts: no
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: Install redis-server
+      apt:
+        name: redis-server
+        state: present
+    - name: Ensure Redis is running
+      service:
+        name: redis-server
+        state: started
+        enabled: yes

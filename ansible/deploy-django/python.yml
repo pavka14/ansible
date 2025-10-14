@@ -1,0 +1,20 @@
+---
+- name: Install latest Python and set up virtualenv
+  hosts: django_servers
+  become: yes
+  gather_facts: no
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: Install python3-venv and pip
+      apt:
+        name:
+          - python3-venv
+          - python3-pip
+        state: present
+    - name: Create virtual environment
+      command: python3 -m venv {{ django_venv_path }}
+      args:
+        creates: "{{ django_venv_path }}/bin/activate"
+    - name: Upgrade pip and wheel in venv
+      command: "{{ django_venv_path }}/bin/pip install --upgrade pip wheel"

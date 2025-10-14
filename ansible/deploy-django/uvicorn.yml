@@ -1,0 +1,25 @@
+---
+- name: Install and configure Uvicorn as a systemd service
+  hosts: django_servers
+  become: yes
+  gather_facts: no
+  vars_files:
+    - variables.yml
+  tasks:
+    - name: Install Uvicorn in the Django virtual environment
+      command: "{{ django_venv_path }}/bin/pip install uvicorn"
+      args:
+        creates: "{{ django_venv_path }}/bin/uvicorn"
+    - name: Deploy Uvicorn systemd unit file
+      template:
+        src: templates/uvicorn.service.j2
+        dest: /etc/systemd/system/uvicorn.service
+        mode: '0644'
+    - name: Reload systemd
+      command: systemctl daemon-reload
+    - name: Enable and start Uvicorn service
+      systemd:
+        name: uvicorn.service
+        enabled: yes
+        state: started
+
