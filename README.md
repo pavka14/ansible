@@ -9,15 +9,21 @@ This playbook creates a clean Matomo installation with phpMyAdmin on Ubuntu serv
 
 **Use this when:** You want to set up a fresh Matomo installation from scratch.
 
-### [Replicate MariaDB](ansible/replicate_mariadb/)
+### [Replicate MariaDB](ansible/replicate-mariadb/)
 This playbook automates the migration of MariaDB databases between servers with replication setup. While originally designed to complement the Matomo deployment for moving existing installations, it can be used to migrate any MariaDB database.
 
 **Use this when:** You need to move an existing database to a new server, or want to set up database replication between servers.
 
+### [Deploy Django](ansible/deploy-django/)
+This playbook creates a Django installation (with code pulled from a github repository) with a PostgreSQL database on Ubuntu servers. It handles everything from system prerequisites to SSL certificates - but the database is "clean" (migrations only).
+
+**Use this when:** You want to set up a fresh Matomo installation from scratch.
+
 ## Getting Started
 
 1. **For a fresh Matomo installation:** Start with the [Deploy Matomo](ansible/deploy-matomo/) playbook
-2. **To migrate an existing Matomo:** First run the Deploy Matomo playbook, then use [Replicate MariaDB](ansible/replicate_mariadb/) to move your data
+2. **To migrate an existing Matomo:** First run the Deploy Matomo playbook, then use [Replicate MariaDB](ansible/replicate-mariadb/) to move your data
+3**For a fresh Django installation:** Start with the [Deploy Django](ansible/deploy-django/) playbook
 
 ## Target Audience
 
@@ -43,5 +49,6 @@ Submissions of new playbooks and corrections/expansions of existing ones are wel
 ```
 ansible/
 ├── deploy-matomo/     # Matomo deployment playbook
-└── replicate_mariadb/ # MariaDB replication and migration
+└── replicate-mariadb/ # MariaDB replication and migration
+├── deploy-django/      # Django deployment playbook
 ```

@@ -1,0 +1,84 @@
+---
+- name: Install nginx and compile GeoIP2 module
+  hosts: django_servers
+  vars_files:
+    - variables.yml
+  become: yes
+
+  tasks:
+    # Stop and disable apache2 if present
+    - name: Stop and disable apache2 service if it exists
+      systemd:
+        name: apache2
+        state: stopped
+        enabled: no
+      register: apache2_service
+      failed_when:
+        - apache2_service.failed
+        - "'Could not find the requested service' not in apache2_service.msg"
+      ignore_errors: no
+
+    # Install nginx from repository
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    # Build the GeoIP2 dynamic module for nginx
+    - name: Get nginx version
+      command: nginx -v
+      register: nginx_ver
+      failed_when: false
+      changed_when: false
+
+    - name: Extract version string
+      set_fact:
+        nginx_version: "{{ nginx_ver.stderr | regex_replace('.*nginx/([0-9.]+).*', '\\1') }}"
+
+    - name: Download nginx source
+      get_url:
+        url: "https://nginx.org/download/nginx-{{ nginx_version }}.tar.gz"
+        dest: /tmp/nginx.tar.gz
+
+    - name: Extract nginx source
+      unarchive:
+        src: /tmp/nginx.tar.gz
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Clone GeoIP2 module
+      git:
+        repo: "https://github.com/leev/ngx_http_geoip2_module.git"
+        dest: /tmp/ngx_http_geoip2_module
+
+    - name: Compile geoip2 module
+      shell: |
+        ./configure --with-compat --add-dynamic-module=/tmp/ngx_http_geoip2_module
+        make modules
+      args:
+        chdir: "/tmp/nginx-{{ nginx_version }}"
+
+    # Move the GeoIP2 dynamic module where nginx expects it to be, add it to conf
+    - block:
+      - name: Create nginx modules directory
+        file:
+          path: /usr/share/nginx/modules
+          state: directory
+          owner: root
+          group: root
+          mode: '0755'
+        become: yes
+
+      - name: Copy compiled module
+        copy:
+          src: "/tmp/nginx-{{ nginx_version }}/objs/ngx_http_geoip2_module.so"
+          dest: "/usr/share/nginx/modules/ngx_http_geoip2_module.so"
+          mode: '0644'
+          remote_src: yes
+          force: yes
+
+    - name: Load module in nginx.conf
+      lineinfile:
+        path: /etc/nginx/nginx.conf
+        line: "load_module modules/ngx_http_geoip2_module.so;"
+        insertafter: "pid /run/nginx.pid;"

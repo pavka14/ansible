@@ -1,0 +1,47 @@
+# All variables required for deploy-django playbooks
+
+# Where everything will run.
+django_host: "{{ lookup('env', 'DJANGO_HOST') }}"
+
+# Who will run the playbook.
+ansible_user: "{{ lookup('env', 'ANSIBLE_USER') }}"
+ansible_password: "{{ lookup('env', 'ANSIBLE_PASSWORD') }}"
+
+# The installed web server user and group. Used by nginx (web server) and uvicorn (application server).
+web_user: "{{ lookup('env', 'WEB_USER') }}"
+web_group: "{{ lookup('env', 'WEB_GROUP') }}"
+
+# Django application
+django_site_dir: "{{ lookup('env', 'DJANGO_SITE_DIR') }}"
+django_venv_path: "{{ lookup('env', 'DJANGO_VENV_PATH') }}"
+django_code_dir: "{{ lookup('env', 'DJANGO_CODE_DIR') }}"
+django_app_dir: "{{ lookup('env', 'DJANGO_APP_DIR') }}"
+django_settings_dir: "{{ lookup('env', 'DJANGO_SETTINGS_DIR') }}"
+# Django project name (for configuring ASGI - used by uvicorn)
+django_project_name: "{{ lookup('env', 'DJANGO_PROJECT_NAME') }}"
+
+# Database. Used by postgres.yml
+db_name: "{{ lookup('env', 'DB_NAME') }}"
+db_user: "{{ lookup('env', 'DB_USER') }}"
+db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+
+# GitHub repository
+github_repo: "{{ lookup('env', 'GITHUB_REPO') }}"
+github_user: "{{ lookup('env', 'GITHUB_USER') }}"
+github_token: "{{ lookup('env', 'GITHUB_TOKEN') }}"
+
+# SSL
+letsencrypt_email: "{{ lookup('env', 'LETSENCRYPT_EMAIL') }}"
+ssl_cert_path: "/etc/letsencrypt/live/{{ lookup('env', 'DJANGO_HOST') }}/fullchain.pem"
+ssl_key_path: "/etc/letsencrypt/live/{{ lookup('env', 'DJANGO_HOST') }}/privkey.pem"
+
+# GeoIP2
+geoip_account_id: "{{ lookup('env', 'GEOIP_ACCOUNT_ID') }}"
+geoip_license_key: "{{ lookup('env', 'GEOIP_LICENSE_KEY') }}"
+
+# Redis
+redis_url: "{{ lookup('env', 'REDIS_URL') }}"
+
+# Uvicorn systemd service configuration
+uvicorn_port: "{{ lookup('env', 'UVICORN_PORT') }}"
+uvicorn_host: "{{ lookup('env', 'UVICORN_HOST') }}"

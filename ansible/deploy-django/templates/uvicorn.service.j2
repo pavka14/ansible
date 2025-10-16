@@ -1,0 +1,18 @@
+[Unit]
+Description=Uvicorn ASGI server for Django
+After=network.target
+
+[Service]
+User={{ web_user }}
+Group={{ web_group }}
+WorkingDirectory={{ django_app_dir }}
+# Uncomment line below if you want to load environment variables before django starts.
+# EnvironmentFile={{ django_settings_dir }}/.env
+# Or, set individual environment variables like the example below.
+Environment=DJANGO_ENV=production
+ExecStart={{ django_venv_path }}/bin/uvicorn {{ django_project_name }}.asgi:application --host {{ uvicorn_host }} --port {{ uvicorn_port }}
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
