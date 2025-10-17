@@ -82,3 +82,14 @@
         path: /etc/nginx/nginx.conf
         line: "load_module modules/ngx_http_geoip2_module.so;"
         insertafter: "pid /run/nginx.pid;"
+
+    - name: Save GeoIP2 config
+      template:
+        src: geoip2.conf.j2
+        dest: /etc/nginx/sites-available/geoip2.conf
+
+    - name: Add GeoIP2 to nginx configuration
+      file:
+        src: /etc/nginx/sites-available/geoip2.conf
+        dest: /etc/nginx/sites-enabled/geoip2.conf
+        state: link
