@@ -16,6 +16,7 @@ This directory contains modular Ansible playbooks for deploying a Django applica
 - **SSL support**: Automated Let's Encrypt certificate acquisition and renewal.
 
 Note that Nginx gets installed with a config file defined in the templates/nginx.conf.j2 jinja template, which is somewhat simplistic (e.g. has no serving of static files). You will probably want to modify it to suit your particular case.
+If you want country and city names in a language other than English, the options to change that are in the geoip2_nginx.conf.j2 template.
 
 ## Prerequisites
 - Ubuntu 24.04 target server(s) with sudo access
